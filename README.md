@@ -22,7 +22,7 @@ pip install -r requirements.txt
 │   ├── vad/               # 语音活动检测 gRPC 服务
 │   ├── denoise/           # 空壳降噪 gRPC 服务
 │   ├── lid/               # 语言识别 gRPC 服务
-│   └── compress/          # 旁路压缩示例
+│   └── compress/          # PCM→Opus 压缩 gRPC 服务
 ├── tests/                 # 测试脚本
 └── requirements.txt
 ```
@@ -36,7 +36,7 @@ pip install -r requirements.txt
    python -m services.vad.server
    python -m services.denoise.server
    python -m services.lid.server
-   python -m services.compress.server  # 可选
+   python -m services.compress.server
    ```
    首次启动 VAD 与 LID 服务会自动将模型下载到仓库的 `models/` 目录。
 3. 启动编排器 WebSocket 服务：
@@ -52,8 +52,7 @@ pip install -r requirements.txt
 
 ## 当前进度
 
-- ✅ WebSocket 编排器，可接入 PCM 并汇聚 VAD/降噪/LID/ASR 结果
-- ✅ VAD / LID / 空壳降噪 gRPC 服务及示例客户端
-- ⏳ 压缩服务仍为占位实现
+- ✅ WebSocket 编排器，可接入 PCM 并汇聚 VAD/降噪/LID/压缩/ASR 结果
+- ✅ VAD / LID / 空壳降噪 / 压缩 gRPC 服务及示例客户端
 
 后续将继续完善监控、降噪以及更多编排能力。
