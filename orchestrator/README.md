@@ -2,9 +2,21 @@
 
 该目录提供一个最小可用的音频编排器示例，通过 WebSocket 接收 PCM16 音频数据，内部串联 VAD/降噪/LID/ASR，并将结果回推给客户端。
 
+## 启动依赖服务
+
+在运行编排器之前，需要先启动各个 gRPC 服务：
+
+```bash
+# 语音活动检测
+python -m services.vad.server
+
+# 语种识别
+python -m services.lid.server
+```
+
 ## 使用流程
 
-1. **启动服务**
+1. **启动编排器**
    ```bash
    python -m orchestrator.server_ws
    ```
@@ -24,7 +36,8 @@
 
 ## 注意事项
 
-- 当前示例中的降噪、LID 仅为占位实现，需接入实际 gRPC 服务方可生效。
+- 当前示例中的降噪为占位实现，需接入实际 gRPC 服务方可生效。
+- `lid` 事件在 `flush` 后返回整体语种结果。
 - 仅在发送到 ASR 之前会将 PCM 编码为 Opus，其余链路全部保持 PCM。
 - VAD 模块基于 sherpa‑onnx，本仓库默认加载 `models/ten-vad.onnx`，请确保模型文件存在。
 - 本示例仅用于演示编排流程，未包含鉴权、错误处理、监控等生产级特性。
