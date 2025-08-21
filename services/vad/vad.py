@@ -118,16 +118,30 @@ class VadSession:
 
             self._drain()
 
-    def flush_wav(self) -> Optional[bytes]:
+    def pop_pcm(self) -> bytes:
+        """Return and clear buffered speech segments as PCM16 bytes."""
+        if not self._final:
+            return b""
+        out = np.concatenate(self._final, axis=0)
+        self._final = []
+        return (out * 32768.0).astype(np.int16).tobytes()
+
+    def flush_pcm(self) -> bytes:
+        """Flush remaining audio and return PCM16 bytes."""
         self.vad.flush()
         self._drain()
         if self._in_seg:
             self._final.append(np.concatenate(self._cur, axis=0))
             self._cur = []
             self._in_seg = False
-        if not self._final:
+        return self.pop_pcm()
+
+    def flush_wav(self) -> Optional[bytes]:
+        """Flush remaining audio and return a WAV file (for server-side use)."""
+        pcm = self.flush_pcm()
+        if not pcm:
             return None
-        out = np.concatenate(self._final, axis=0)
+        arr = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
         buf = io.BytesIO()
-        sf.write(buf, out, self.sr, format="WAV")
+        sf.write(buf, arr, self.sr, format="WAV")
         return buf.getvalue()

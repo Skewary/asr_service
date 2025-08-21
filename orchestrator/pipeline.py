@@ -1,7 +1,7 @@
 import asyncio
 from typing import Any, Dict
 
-from .modules import vad_client, denoise_client, lid_client, asr_client
+from .modules import denoise_client, lid_client, asr_client, vad_client
 from .utils.opus_codec import PcmToOpus
 
 
@@ -18,6 +18,7 @@ class Orchestrator:
             "opus": PcmToOpus(),
             "asr": asr_client.AsrClient(flow_id),
             "lid": lid_client.LidClient(flow_id),
+            "vad": vad_client.VadClient(),
         }
         print(f"[{flow_id}] start")
 
@@ -27,8 +28,10 @@ class Orchestrator:
             return
         sess = self.sessions[flow_id]
         # Dispatch to VAD and denoise services
-        pcm_vad = await vad_client.send(pcm_bytes)
-        pcm_clean = await denoise_client.send(pcm_vad)
+        vad_out = await sess["vad"].send(pcm_bytes)
+        if not vad_out:
+            return
+        pcm_clean = await denoise_client.send(vad_out)
         sess["lid"].feed(pcm_clean)
         # Encode to Opus for ASR
         for pkt in sess["opus"].encode(pcm_clean):
@@ -39,6 +42,12 @@ class Orchestrator:
         sess = self.sessions.get(flow_id)
         if not sess:
             return
+        vad_tail = await sess["vad"].flush()
+        if vad_tail:
+            pcm_clean = await denoise_client.send(vad_tail)
+            sess["lid"].feed(pcm_clean)
+            for pkt in sess["opus"].encode(pcm_clean):
+                await sess["asr"].send(pkt)
         await sess["asr"].flush()
         await sess["ws"].write_message({"type": "end", "flowId": flow_id})
 

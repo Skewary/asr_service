@@ -1,9 +1,17 @@
-"""Stub gRPC client for voice activity detection."""
+"""Local VAD client that wraps the shared sherpa-onnx session."""
 
-import asyncio
+from services.vad.vad import make_vad_session, pcm16_bytes_to_float32
 
 
-async def send(pcm_bytes: bytes) -> bytes:
-    """Pretend to send PCM to VAD service and return trimmed audio."""
-    await asyncio.sleep(0)
-    return pcm_bytes
+class VadClient:
+    """Simple in-process VAD using sherpa-onnx."""
+
+    def __init__(self):
+        self.sess = make_vad_session()
+
+    async def send(self, pcm_bytes: bytes) -> bytes:
+        self.sess.accept_f32(pcm16_bytes_to_float32(pcm_bytes))
+        return self.sess.pop_pcm()
+
+    async def flush(self) -> bytes:
+        return self.sess.flush_pcm()
