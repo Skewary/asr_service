@@ -6,7 +6,7 @@
 ## 启动
 
 ```bash
-python server.py
+python -m services.lid.server
 ```
 
 首次启动会自动把模型下载到仓库的 `models/lid/` 目录，以便后续复用。

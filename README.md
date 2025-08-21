@@ -38,6 +38,7 @@ pip install -r requirements.txt
    python -m services.lid.server
    python -m services.compress.server  # 可选
    ```
+   首次启动 VAD 与 LID 服务会自动将模型下载到仓库的 `models/` 目录。
 3. 启动编排器 WebSocket 服务：
 
    ```bash
