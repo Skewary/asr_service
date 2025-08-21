@@ -1,4 +1,5 @@
 import asyncio, json, websockets, numpy as np, soundfile as sf
+from pathlib import Path
 
 async def send_only(ws_url, wav_path, flow="f001", dev="devA"):
     y, sr = sf.read(wav_path, dtype="float32")
@@ -15,5 +16,6 @@ async def send_only(ws_url, wav_path, flow="f001", dev="devA"):
         # await w.send("flush")
     # 直接退出，不读任何返回
 
-asyncio.run(send_only("ws://localhost:9001/ws/vad", "test.wav"))
+wav_file = Path(__file__).with_name("test.wav")
+asyncio.run(send_only("ws://localhost:9001/ws/vad", str(wav_file)))
 
