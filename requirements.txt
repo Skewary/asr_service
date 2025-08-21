@@ -1,0 +1,8 @@
+grpcio
+grpcio-tools
+tornado
+numpy
+soundfile
+sherpa-onnx
+speechbrain
+opuslib
