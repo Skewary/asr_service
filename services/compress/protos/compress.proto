@@ -1,0 +1,14 @@
+syntax = "proto3";
+package compress;
+
+service Compress {
+  rpc Encode (PCM) returns (Opus) {}
+}
+
+message PCM {
+  bytes data = 1;
+}
+
+message Opus {
+  bytes data = 1;
+}

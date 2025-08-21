@@ -1,8 +1,7 @@
 import asyncio
 from typing import Any, Dict
 
-from .modules import denoise_client, lid_client, asr_client, vad_client
-from .utils.opus_codec import PcmToOpus
+from .modules import denoise_client, lid_client, asr_client, vad_client, compress_client
 
 
 class Orchestrator:
@@ -15,7 +14,7 @@ class Orchestrator:
         """Prepare session state for a new streaming flow."""
         self.sessions[flow_id] = {
             "ws": ws,
-            "opus": PcmToOpus(),
+            "compress": compress_client.CompressClient(),
             "asr": asr_client.AsrClient(flow_id),
             "lid": lid_client.LidClient(flow_id),
             "vad": vad_client.VadClient(flow_id=flow_id),
@@ -48,8 +47,9 @@ class Orchestrator:
             sess["buffer"].extend(pcm_clean)
         language = await sess["lid"].flush()
         buffer = bytes(sess["buffer"])
+        packets = await sess["compress"].encode(buffer)
         first = True
-        for pkt in sess["opus"].encode(buffer):
+        for pkt in packets:
             await sess["asr"].send(pkt, language if first else None)
             first = False
         await sess["asr"].flush()
@@ -65,4 +65,5 @@ class Orchestrator:
             sess["asr"].close()
             sess["lid"].close()
             sess["denoise"].close()
+            sess["compress"].close()
         print(f"[{flow_id}] closed")
