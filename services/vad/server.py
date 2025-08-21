@@ -4,30 +4,20 @@
 # 新 VAD 服务端（支持弱端：no_reply + 直推下游 Compress）
 # =========================
 import os
-import io
 import json
 import uuid
 import asyncio
-from collections import deque
-from typing import List, Optional, Tuple
+from typing import Tuple
 
-import numpy as np
-import soundfile as sf
 import tornado.ioloop
 import tornado.web
 import tornado.websocket
 import tornado.httpclient
 
-import sherpa_onnx  # pip install sherpa-onnx
+from .vad import make_vad_session, pcm16_bytes_to_float32
 
 # -------- 配置 --------
 VAD_PORT = int(os.environ.get("VAD_PORT", "9001"))
-DEFAULT_SR = int(os.environ.get("VAD_SR", "16000"))
-VAD_BUFFER_SEC = float(os.environ.get("VAD_BUFFER_SEC", "60"))
-VAD_CHUNK_MS = int(os.environ.get("VAD_CHUNK_MS", "20"))
-VAD_THRESHOLD = float(os.environ.get("VAD_THRESHOLD", "0.48"))
-VAD_PAD_START_MS = int(os.environ.get("VAD_PAD_START_MS", "100"))
-VAD_PAD_END_MS = int(os.environ.get("VAD_PAD_END_MS", "80"))
 
 # 弱端相关：空闲超时自动 flush（采集端可不发送 "flush"、可直接断开）
 IDLE_FLUSH_SEC = float(os.environ.get("VAD_IDLE_FLUSH_SEC", "3.0"))
@@ -35,104 +25,6 @@ IDLE_FLUSH_SEC = float(os.environ.get("VAD_IDLE_FLUSH_SEC", "3.0"))
 # 下游 Compress HTTP（VAD 直推用）
 DEFAULT_COMPRESS_URL = os.environ.get("COMPRESS_URL", "http://127.0.0.1:5691/compress")
 COMPRESS_HTTP_TIMEOUT = float(os.environ.get("COMPRESS_HTTP_TIMEOUT", "120"))
-
-# -------- 工具 --------
-def pcm16_bytes_to_float32(pcm: bytes) -> np.ndarray:
-    if not pcm:
-        return np.empty((0,), dtype=np.float32)
-    arr = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
-    return np.ascontiguousarray(arr)
-
-def make_vad_session(
-    model_path: str = os.environ.get("VAD_MODEL", "ten-vad.onnx"),
-    sr: int = DEFAULT_SR,
-    buffer_sec: float = VAD_BUFFER_SEC,
-    chunk_ms: int = VAD_CHUNK_MS,
-    threshold: float = VAD_THRESHOLD,
-    pad_start_ms: int = VAD_PAD_START_MS,
-    pad_end_ms: int = VAD_PAD_END_MS,
-):
-    cfg = sherpa_onnx.VadModelConfig()
-    cfg.sample_rate = sr
-    if hasattr(cfg, "ten_vad"):
-        cfg.ten_vad.model = model_path
-        try:
-            if hasattr(cfg.ten_vad, "threshold"):
-                cfg.ten_vad.threshold = float(threshold)
-        except Exception:
-            pass
-    else:
-        try:
-            cfg.model = model_path
-        except Exception:
-            pass
-    return _VadSession(cfg, sr, buffer_sec, chunk_ms, pad_start_ms, pad_end_ms)
-
-class _VadSession:
-    def __init__(self, cfg, sr, buffer_sec, chunk_ms, pad_start_ms, pad_end_ms):
-        self.vad = sherpa_onnx.VoiceActivityDetector(cfg, buffer_size_in_seconds=buffer_sec)
-        self.sr = sr
-        self.chunk_ms = chunk_ms
-        self.chunk_samples = int(sr * chunk_ms / 1000.0)
-        self.pad_start_frames = max(0, int(pad_start_ms // chunk_ms))
-        self.pad_end_frames = max(0, int(pad_end_ms // chunk_ms))
-        self._pre = deque(maxlen=self.pad_start_frames)
-        self._in_seg = False
-        self._cur: List[np.ndarray] = []
-        self._final: List[np.ndarray] = []
-        self._tail_left = 0
-
-    def _drain(self):
-        try:
-            while not self.vad.empty():
-                _ = self.vad.front
-                self.vad.pop()
-        except Exception:
-            pass
-
-    def accept_f32(self, samples: np.ndarray):
-        if samples.size == 0: return
-        for i in range(0, samples.size, self.chunk_samples):
-            c = samples[i:i + self.chunk_samples]
-            if c.size == 0: break
-            if self.pad_start_frames: self._pre.append(c.copy())
-            self.vad.accept_waveform(c)
-            speech = bool(self.vad.is_speech_detected())
-
-            if not self._in_seg and speech:
-                if self._pre:
-                    self._cur.extend(list(self._pre))
-                else:
-                    self._cur.append(c)
-                self._in_seg = True
-                self._tail_left = self.pad_end_frames
-            elif self._in_seg and speech:
-                self._cur.append(c)
-                self._tail_left = self.pad_end_frames
-            elif self._in_seg and (not speech):
-                if self._tail_left > 0:
-                    self._cur.append(c)
-                    self._tail_left -= 1
-                else:
-                    self._final.append(np.concatenate(self._cur, axis=0))
-                    self._cur = []
-                    self._in_seg = False
-
-            self._drain()
-
-    def flush_wav(self) -> Optional[bytes]:
-        self.vad.flush()
-        self._drain()
-        if self._in_seg:
-            self._final.append(np.concatenate(self._cur, axis=0))
-            self._cur = []
-            self._in_seg = False
-        if not self._final:
-            return None
-        out = np.concatenate(self._final, axis=0)
-        buf = io.BytesIO()
-        sf.write(buf, out, self.sr, format="WAV")
-        return buf.getvalue()
 
 # 构建 multipart/form-data（最少依赖）
 def build_multipart(fields: dict, files: dict) -> Tuple[bytes, str]:
