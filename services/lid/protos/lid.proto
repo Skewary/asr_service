@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package lid;
+
+service LID {
+  // Detect language from raw PCM audio bytes.
+  rpc Detect (LIDRequest) returns (LIDResponse);
+}
+
+message LIDRequest {
+  bytes pcm = 1;          // 16-bit mono PCM audio
+  int32 sample_rate = 2;  // Sampling rate of the PCM data
+}
+
+message LIDResponse {
+  string language = 1; // Predicted language label
+  float score = 2;     // Confidence score
+}

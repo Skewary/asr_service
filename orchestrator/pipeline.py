@@ -49,6 +49,9 @@ class Orchestrator:
             for pkt in sess["opus"].encode(pcm_clean):
                 await sess["asr"].send(pkt)
         await sess["asr"].flush()
+        language = await sess["lid"].flush()
+        if language:
+            await sess["ws"].write_message({"type": "lid", "flowId": flow_id, "language": language})
         await sess["ws"].write_message({"type": "end", "flowId": flow_id})
 
     def close_flow(self, flow_id: str) -> None:
@@ -56,4 +59,5 @@ class Orchestrator:
         sess = self.sessions.pop(flow_id, None)
         if sess:
             sess["asr"].close()
+            sess["lid"].close()
         print(f"[{flow_id}] closed")
