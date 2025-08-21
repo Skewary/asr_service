@@ -19,40 +19,44 @@ class Orchestrator:
             "asr": asr_client.AsrClient(flow_id),
             "lid": lid_client.LidClient(flow_id),
             "vad": vad_client.VadClient(flow_id=flow_id),
+            "denoise": denoise_client.DenoiseClient(),
+            "buffer": bytearray(),
         }
         print(f"[{flow_id}] start")
 
     async def feed_pcm(self, flow_id: str, pcm_bytes: bytes, ws) -> None:
-        """Process raw PCM: VAD -> Denoise -> LID -> ASR."""
+        """Process raw PCM: VAD -> Denoise -> LID (buffer only)."""
         if flow_id not in self.sessions:
             return
         sess = self.sessions[flow_id]
-        # Dispatch to VAD and denoise services
         vad_out = await sess["vad"].send(pcm_bytes)
         if not vad_out:
             return
-        pcm_clean = await denoise_client.send(vad_out)
+        pcm_clean = await sess["denoise"].send(vad_out)
         sess["lid"].feed(pcm_clean)
-        # Encode to Opus for ASR
-        for pkt in sess["opus"].encode(pcm_clean):
-            await sess["asr"].send(pkt)
+        sess["buffer"].extend(pcm_clean)
 
     async def flush(self, flow_id: str) -> None:
-        """Signal end of stream and notify client."""
+        """Flush remaining audio, detect language, and stream to ASR."""
         sess = self.sessions.get(flow_id)
         if not sess:
             return
         vad_tail = await sess["vad"].flush()
         if vad_tail:
-            pcm_clean = await denoise_client.send(vad_tail)
+            pcm_clean = await sess["denoise"].send(vad_tail)
             sess["lid"].feed(pcm_clean)
-            for pkt in sess["opus"].encode(pcm_clean):
-                await sess["asr"].send(pkt)
-        await sess["asr"].flush()
+            sess["buffer"].extend(pcm_clean)
         language = await sess["lid"].flush()
+        buffer = bytes(sess["buffer"])
+        first = True
+        for pkt in sess["opus"].encode(buffer):
+            await sess["asr"].send(pkt, language if first else None)
+            first = False
+        await sess["asr"].flush()
         if language:
             await sess["ws"].write_message({"type": "lid", "flowId": flow_id, "language": language})
         await sess["ws"].write_message({"type": "end", "flowId": flow_id})
+        sess["buffer"].clear()
 
     def close_flow(self, flow_id: str) -> None:
         """Cleanup session state."""
@@ -60,4 +64,5 @@ class Orchestrator:
         if sess:
             sess["asr"].close()
             sess["lid"].close()
+            sess["denoise"].close()
         print(f"[{flow_id}] closed")

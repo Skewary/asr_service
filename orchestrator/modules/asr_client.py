@@ -12,10 +12,10 @@ class AsrClient:
         self.stub = asr_pb2_grpc.RecognizeStub(self.channel)
         self.stream = None
 
-    async def send(self, opus_pkt: bytes) -> None:
+    async def send(self, opus_pkt: bytes, language: str | None = None) -> None:
         if not self.stream:
             self.stream = self.stub.Stream()
-            start = asr_pb2.Start(flow_id=self.flow_id, codec="opus", sr=16000)
+            start = asr_pb2.Start(flow_id=self.flow_id, codec="opus", sr=16000, language=language)
             await self.stream.write(asr_pb2.ClientFrame(start=start))
         await self.stream.write(
             asr_pb2.ClientFrame(opus=asr_pb2.OpusPacket(data=opus_pkt))

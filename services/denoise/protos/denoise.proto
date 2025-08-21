@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package denoise;
+
+service Denoise {
+  rpc Clean (Audio) returns (Audio) {}
+}
+
+message Audio {
+  bytes pcm = 1;
+  int32 sample_rate = 2;
+}

@@ -8,6 +8,7 @@ class Start:
     flow_id: str
     codec: str
     sr: int
+    language: str | None = None
 
 
 @dataclass

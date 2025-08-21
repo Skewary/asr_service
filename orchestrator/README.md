@@ -10,6 +10,9 @@
 # 语音活动检测
 python -m services.vad.server
 
+# 空壳降噪
+python -m services.denoise.server
+
 # 语种识别
 python -m services.lid.server
 ```
@@ -36,9 +39,8 @@ python -m services.lid.server
 
 ## 注意事项
 
-- 当前示例中的降噪为占位实现，需接入实际 gRPC 服务方可生效。
-- `lid` 事件在 `flush` 后返回整体语种结果。
+- 当前降噪服务仅回传原始音频，作为 gRPC 交互示例。
+- `lid` 事件在 `flush` 后返回整体语种结果，同时该标签也会附加在发送到 ASR 的起始帧中。
 - 仅在发送到 ASR 之前会将 PCM 编码为 Opus，其余链路全部保持 PCM。
 - VAD 模块基于 sherpa‑onnx，本仓库默认加载 `models/ten-vad.onnx`，请确保模型文件存在。
 - 本示例仅用于演示编排流程，未包含鉴权、错误处理、监控等生产级特性。
-
