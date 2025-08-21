@@ -41,3 +41,4 @@ class VadClient:
             out += resp.pcm.data
         self.stream = None
         return out
+

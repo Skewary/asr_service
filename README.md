@@ -5,84 +5,56 @@
 > 总体原则：**对外一个流式入口+一个事件出口**；**内部可编排**；**除发往 ASR 的链路外全程 PCM**；**ASR 独立机器/集群**。
 
 ---
-
-## 1. 范围与目标
-
-**必须实现**
-
-1. 对外 **WebSocket** 流式入口：上行 **PCM16/16k/mono**，下行统一事件流（`ack/lid/asr_partial/asr_final/record_url/metrics/end/error`）。
-2. Orchestrator（网关+编排+汇聚）：
-
-   * 入口解码/重分片、抖动缓冲、会话管理、背压。
-   * 内部调用 **VAD → Denoise →（旁路 Compress） → LID → ASR**。
-   * **仅在发往 ASR 时将 PCM→Opus(20ms, 16–24kbps, VBR)**，ASR 端解回 PCM 再识别。
-   * 事件聚合后单通道回下行。
-3. **ASR 独立机器/集群**（gRPC 双向流），支持按语言/域路由。
-4. Compress 旁路归档：落对象存储（或本地静态目录），返回绝对 URL。
-5. 可观测性与可靠性：Prometheus 指标、OTel Trace、健康探针、熔断/降级、幂等、重试。
-
-**不在本期**
-
-* 前端 UI/SDK、跨地域多活、计费。
+收到！我把两条硬性约束“**不用 WebRTC**、‘**压缩**’= **PCM→Opus**（仅在送 ASR 时发生）”落进整体方案，给 Codex 的落地说明如下。
 
 ---
 
-## 2. 性能 & SLA（验收口径）
+# 0. 关键结论（先说人话）
 
-* 端到端互动时延（首个 partial）：P50 ≤ **300ms**，P95 ≤ **600ms**（取决 ASR 模型/硬件）。
-* ASR 平均 RTF ≤ **0.5**。
-* Orchestrator 单实例承载 ≥ **500** 活跃会话（可水平扩展）。
-* 可用性 ≥ **99.9%**（月）。
-* 只有 **Orchestrator→ASR** 使用 Opus；其余链路 PCM（抓包/日志可核验）。
+* **对外入口**：只支持 **WebSocket**（WS），上行必须是 **PCM16/16k/mono**。
+* **内部链路**：**全程 PCM** 到 ASR 边界；**仅在“编排器 → ASR”一跳把 PCM 编码成 Opus**（20 ms、16–24 kbps、VBR）。
+* **不使用 WebRTC**；不再做 MP3/AAC 这类有损归档。若要留档，建议 **FLAC（无损）** 旁路写存储；与“压缩”一词彻底解耦。
 
 ---
 
-## 3. 顶层架构
+# 1. 架构（更新版）
 
 ```
 Client(WS/PCM16) → Orchestrator/Gateway
-   ├─ PCM16 → VAD (gRPC stream)
-   ├─ PCM16 → Denoise (gRPC stream)
-   ├─ PCM16 → LID (gRPC stream, 前N秒并行，回 lang)
-   ├─ PCM16 → Compress (旁路归档，回 record_url)
-   └─ PCM→Opus(20ms,VBR,16–24kbps) → ASR(独立机/集群,gRPC stream)
-返回：事件流（ack/lid/asr_partial/asr_final/record_url/metrics/end）
+   ├─ PCM → VAD (gRPC stream)
+   ├─ PCM → Denoise (gRPC stream)
+   ├─ PCM → LID (gRPC stream, 前N秒并行 → lang)
+   ├─ PCM → (可选) Archive=FLAC（无损留档，HTTP/gRPC，回 record_url）
+   └─ PCM → [Opus 编码仅此处] → ASR(独立机器/集群, gRPC stream, 收Opus包)
+返回：事件流（ack / lid / asr_partial / asr_final / record_url / metrics / end）
 ```
+
+> **注意**：之前的 “Compress(mp3)” 服务不再适用；如需留档，改为 **Archive(FLAC)** 旁路服务，不影响 ASR 主链。
 
 ---
 
-## 4. 对外协议（WebSocket）
+# 2. 外部协议（固定 PCM）
 
-**URL**：`wss://gw.example.com/ws/stream`
+**WS URL**：`wss://gw.example.com/ws/stream`
 
-### 4.1 上行
+* `start` 控制帧（示例）
 
-* `start` 控制帧（JSON）
-
-```json
-{
-  "type": "start",
-  "flowId": "string",
-  "audio": {"codec":"pcm_s16le","sr":16000,"channels":1,"chunk_ms":20},
-  "return": ["lid","asr","record_url"],
-  "hints": {"domain":"default","user_lang_pref":"auto"},
-  "auth": {"token":"<JWT>"}
-}
-```
-
-* 二进制音频：PCM16，建议 20ms 分片（可变长，服务端重分片）
-* 结束：`{"type":"flush"}` 或直接断开（服务端自动 flush）
-
-### 4.2 下行事件（JSON 文本帧）
-
-* `ack` / `lid` / `asr_partial` / `asr_final` / `record_url` / `metrics` / `end` / `error`
-* 频控：`asr_partial` 至多每 **200–300ms** 一条
+  ```json
+  {
+    "type":"start",
+    "flowId":"flow-001",
+    "audio":{"codec":"pcm_s16le","sr":16000,"channels":1,"chunk_ms":20},
+    "return":["lid","asr","record_url"]
+  }
+  ```
+* 二进制：**PCM16** 分片（任意大小，服务端重分片为 20 ms）。
+* 结束：`{"type":"flush"}` 或直接断开（编排器自动 flush）。
 
 ---
 
-## 5. 内部接口（gRPC 统一）
+# 3. 内部接口（gRPC 统一；ASR 仅收 Opus）
 
-### 5.1 公共消息（PCM 帧）
+## 3.1 公共帧（PCM）
 
 ```proto
 syntax = "proto3";
@@ -93,13 +65,23 @@ message AudioFrame {
   int64  seq     = 2;
   int32  sr      = 3;   // 16000
   int32  channels= 4;   // 1
-  int32  ns      = 5;   // 本帧时长(纳秒)，例：20ms=20_000_000
-  int64  pts     = 6;   // 会话内时间戳(纳秒)
-  bytes  pcm     = 7;   // PCM16 原始字节
+  int32  ns      = 5;   // 20ms → 20_000_000
+  int64  pts     = 6;   // 纳秒
+  bytes  pcm     = 7;   // PCM16 little-endian
 }
 ```
 
-### 5.2 ASR（仅此链路用 Opus）
+## 3.2 VAD / Denoise / LID（保持 PCM）
+
+```proto
+service Vad     { rpc Stream(stream common.v1.AudioFrame) returns (stream common.v1.AudioFrame); }
+service Denoise { rpc Stream(stream common.v1.AudioFrame) returns (stream common.v1.AudioFrame); }
+
+message LidResult { string flow_id=1; string lang=2; float score=3; }
+service Lid { rpc Detect(stream common.v1.AudioFrame) returns (LidResult); }  // 前N秒就返回
+```
+
+## 3.3 ASR（仅此链路用 Opus）
 
 ```proto
 syntax = "proto3";
@@ -113,7 +95,7 @@ message Start {
   int32  frame_ms= 5;   // 20
   int32  bitrate = 6;   // 16000~24000
   bool   vbr     = 7;   // true
-  string lang_hint = 8; // 可选：路由/模型热词
+  string lang_hint = 8; // LID 或客户 hint，用于路由/词典
 }
 
 message OpusPacket { bytes data = 1; int64 seq = 2; }
@@ -123,11 +105,11 @@ message ClientFrame {
 }
 
 message AsrEvent {
-  string type   = 1;  // "partial"|"final"|"end"|"error"
-  string flow_id= 2;
-  string text   = 3;
-  repeated float ts = 4; // [start,end]
-  string lang   = 5;
+  string type    = 1;  // "partial" | "final" | "end" | "error"
+  string flow_id = 2;
+  string text    = 3;
+  repeated float ts = 4; // [start, end]
+  string lang    = 5;
 }
 
 service Recognize {
@@ -135,65 +117,96 @@ service Recognize {
 }
 ```
 
-### 5.3 VAD / Denoise / LID（PCM）
+---
 
-```proto
-service Vad { rpc Stream(stream common.v1.AudioFrame) returns (stream common.v1.AudioFrame); }
-service Denoise { rpc Stream(stream common.v1.AudioFrame) returns (stream common.v1.AudioFrame); }
+# 4. 编排器实现要点（只在 ASR 前编码）
 
-message LidResult { string flow_id=1; string lang=2; float score=3; }
-service Lid { rpc Detect(stream common.v1.AudioFrame) returns (LidResult); }
+### 4.1 PCM → Opus（编排器端）
+
+```python
+# pip install opuslib
+import numpy as np
+from opuslib import Encoder, APPLICATION_AUDIO
+
+SR, CH, FRAME_MS, BITRATE = 16000, 1, 20, 20000
+SAMPLES = SR * FRAME_MS // 1000  # 320
+
+enc = Encoder(SR, CH, APPLICATION_AUDIO)
+enc.bitrate = BITRATE  # 16k~24k 之间按网络选
+# enc.set_option(..., VBR=True)  # 视版本
+
+def pcm_to_opus_packets(pcm_int16: np.ndarray):
+    for i in range(0, len(pcm_int16), SAMPLES):
+        frame = pcm_int16[i:i+SAMPLES]
+        if len(frame) < SAMPLES: break
+        yield enc.encode(frame.tobytes(), SAMPLES)
 ```
 
-### 5.4 Compress（旁路）
+### 4.2 Opus → PCM（ASR 端）
 
-* HTTP `POST /compress` (multipart) 或 gRPC 流；返回 `record_url`（绝对 URL）。
+```python
+from opuslib import Decoder
+SR, CH, FRAME_MS = 16000, 1, 20
+SAMPLES = SR * FRAME_MS // 1000
+dec = Decoder(SR, CH)
 
----
+def opus_packet_to_pcm(packet: bytes) -> bytes:
+    return dec.decode(packet, SAMPLES)  # 320 samples * 2 bytes
+```
 
-## 6. 关键实现要点
+### 4.3 Pipeline（伪代码）
 
-* **Orchestrator**
+```python
+pcm = rechunk_to_20ms(incoming_pcm)
 
-  * WS 会话管理，抖动缓冲，静音超时 `FLUSH_IDLE_SEC`（默认 3s）。
-  * 背压：下行 partial 节流、上行帧滑窗、gRPC 背压配合。
-  * **PCM→Opus**：`opuslib` 单包编码（20ms），参数可配；失败自动回退 PCM 直传。
-  * 路由：LID 前 N 秒早返回（默认 2–3s）→ 选择 `asr.*` 池（zh/en/multi…）。
-  * 事件聚合：按时间线合并 LID、ASR、Compress，统一回下行。
-  * 幂等：`flowId` 贯穿；对象存储使用预签名 URL/可重复写策略。
+# 主链：VAD → Denoise → Opus → ASR
+for f in pcm:
+    f1 = vad.push(f)           # PCM
+    f2 = denoise.push(f1)      # PCM
+    for pkt in pcm_to_opus_packets(to_int16(f2)):
+        asr.send(pkt)          # gRPC → ASR
 
-* **ASR（独立机/集群）**
+# 并行：LID（前N秒）→ 决定 asr pool / lang_hint
+lid.feed(pcm_first_n_seconds)
 
-  * gRPC 双向流；收到 `Start(codec=opus)` 后逐包解码→PCM→前端/模型。
-  * 并发上限、队列、冷启动预热；`/healthz` & Prom 指标。
-  * 多模型池：按语言/域路由；热词/词典注入。
-
-* **VAD / Denoise / LID**
-
-  * 统一 gRPC 适配层（若短期沿用现有 HTTP/WS，可在 Orchestrator 边车转换）。
-  * 参数化：`threshold/pad_*_ms/chunk_ms`，`NR` 算法可切换。
-
-* **Compress**
-
-  * 落对象存储（MinIO/S3），返回绝对 URL（跨机可访问）。
-  * 可选实时转码输出（后续）。
+# 旁路：Archive(FLAC)
+archive.feed(pcm)  # 可选，回 record_url
+```
 
 ---
 
-## 7. 配置与开关
+# 5. 参数与开关（务必固化）
 
-| 键                                  | 说明              | 默认          |
-| ---------------------------------- | --------------- | ----------- |
-| `ASR_LINK_CODEC`                   | `opus` \| `pcm` | `opus`      |
-| `ASR_LINK_BITRATE`                 | Opus 比特率        | `20000`     |
-| `ASR_LINK_FRAME_MS`                | Opus 帧长         | `20`        |
-| `PARTIAL_INTERVAL_MS`              | partial 下行最小间隔  | `250`       |
-| `FLUSH_IDLE_SEC`                   | 无帧自动 flush      | `3`         |
-| `LID_FIRST_N_SECONDS`              | LID 使用的前置时长     | `3`         |
-| `ENABLE_DENOISE`/`ENABLE_COMPRESS` | 模块开关            | `true/true` |
-| `PUBLIC_BASE`                      | 压缩回绝对 URL 前缀    | 必配(生产)      |
+* `ASR_LINK_CODEC=opus`（仅此值；提供 `pcm` 仅用于故障回退）
+* `ASR_LINK_BITRATE=16000..24000`（默认 20000）
+* `ASR_LINK_FRAME_MS=20`、`ASR_LINK_VBR=true`
+* `PARTIAL_INTERVAL_MS=250`（partial 下行节流）
+* `LID_FIRST_N_SECONDS=3`
+* `FLUSH_IDLE_SEC=3`
+* `ENABLE_ARCHIVE_FLAC=true|false`（如需留档且无损）
 
 ---
+
+# 6. 验收与测试（聚焦“只此一跳有损”）
+
+* **协议约束**：外部入口仅接受 `pcm_s16le`；拒绝 `opus/ogg`。
+* **链路核验**：抓包/日志字段确认**只有 Orchestrator→ASR** 使用 `Opus`；其余 RPC/WS 皆为 PCM。
+* **时延/RTF**：P50 ≤ 300 ms、P95 ≤ 600 ms；ASR 平均 RTF ≤ 0.5。
+* **音质**：与“全 PCM 直传 ASR”对比，字准/RTF 无显著退化（≤ 可接受阈值）。
+* **回退机制**：Opus 编码失败或 ASR 端解码异常 → 自动切回 `ASR_LINK_CODEC=pcm`（打点告警）。
+* **稳定性**：2 小时稳态流；1% 丢包/乱序注入；无崩溃与严重退化。
+
+---
+
+# 7. 注意事项 / 坑点规避
+
+* **只在一处编码**：不要在任何前处理环节（VAD/降噪/LID/留档）做有损编码。
+* **帧对齐**：Opus 20 ms → 320 samples；确保 seq/pts 连续，避免 ASR 时间轴漂移。
+* **通道**：强制单声道（必要时在入口做 downmix）。
+* **音量归一**：若入口幅度异常，入口统一归一化到 \[-1,1] / int16。
+* **FEC/NACK**：内部机房链路通常无需；若跨 IDC 且丢包明显，再评估。
+* **归档需求**：若客户仍想要“压缩留档”，只能走 **FLAC**（无损）；不要再使用 MP3/AAC。
+
 
 ## 8. 目录结构（建议）
 
@@ -219,107 +232,6 @@ repo/
  │   ├─ perf/                 # 并发/RTF 压测
  │   └─ chaos/                # 故障注入
  └─ docs/
-```
-
----
-
-## 9. 监控与日志
-
-* **Metrics（Prometheus）**
-
-  * `orchestrator_active_sessions`, `ingress_bytes_total`, `egress_events_total`
-  * `asr_rtf`, `asr_latency_ms_bucket`, `asr_inflight_sessions`
-  * `vad_latency_ms`, `dn_latency_ms`, `lid_latency_ms`, `compress_latency_ms`
-  * `pcm_to_opus_fail_total`（回退触发）
-* **Tracing（OTel）**：`flowId`/`traceId` 贯穿；关键 span：WS 接入、每阶段处理、ASR roundtrip。
-* **日志字段**：`ts, flowId, stage, seq, sr, ns, bytes_in/out, lang, model, latency_ms, err_code`
-
----
-
-## 10. 测试计划（DoD）
-
-* **契约测试**：WS 消息/事件 schema 校验；gRPC proto 兼容性。
-* **功能**：
-
-  * LID 早返回；ASR partial/final 时序正确；record\_url 可访问。
-  * 仅 ASR 链路用 Opus（抓包/日志字段 `asr_link_codec`）。
-* **性能**：并发 200/500/1000；记录 RTF/延迟/CPU/内存。
-* **稳定性**：2 小时稳态；1% 丢包/乱序；故障注入（ASR 池宕机/超时）。
-* **安全**：TLS/mTLS，JWT 校验，速率限制。
-* **回退**：Opus 编码失败→PCM 直传；ASR Busy→仅录音+稍后转写（返回 record\_url）。
-
----
-
-## 11. 里程碑
-
-* **M1（周1–2）**：
-
-  * WS 入口最小可用；Orchestrator 直通 VAD→Compress；事件流骨架。
-  * 交付：E2E 最小链路与健康检查、basic metrics。
-* **M2（周3–4）**：
-
-  * LID 并行并路由 ASR（先 PCM 直传）；监控与日志完善。
-  * 交付：事件聚合完整、SLO 面板。
-* **M3（周5–6）**：
-
-  * 引入 Opus（仅 ASR 链路），回退机制；ASR 独立机部署/容量压测。
-  * 交付：RTF/延迟达标报告。
-* **M4（周7–8）**：
-
-  * Compress 对象存储、灰度与告警、故障演练与最终验收。
-  * 交付：Runbook、Helm Charts、性能与稳定性报告。
-
----
-
-## 12. 风险与对策
-
-* **HTTP/2/网络兼容**：外部统一走 WS；内部 gRPC 在内网。
-* **Opus 编解码抖动**：仅 ASR 链路使用；失败回退 PCM；可调 `bitrate/frame_ms`。
-* **ASR 瓶颈**：多池路由、并发上限、熔断/降级、自动扩缩与预热。
-* **大文件中转**：旁路归档直写对象存储，避免 Orchestrator 中转。
-
----
-
-## 13. 交付清单
-
-* 源码（Orchestrator、各服务、proto）、Docker/Helm/K8s、CI（lint/test/build/push/deploy）。
-* 文档（API/Schema、运维手册、监控面板、告警策略）。
-* 测试（E2E/性能/稳定性/故障注入脚本与报告）。
-
----
-
-## 14. 代码片段（关键最小实现）
-
-### 14.1 Orchestrator：PCM → Opus（仅 ASR 链路）
-
-```python
-# pip install opuslib
-import numpy as np
-from opuslib import Encoder, APPLICATION_AUDIO
-
-SR, CH, FRAME_MS, BITRATE = 16000, 1, 20, 20000
-SAMPLES = SR * FRAME_MS // 1000
-
-enc = Encoder(SR, CH, APPLICATION_AUDIO)
-enc.bitrate = BITRATE  # 可配：16k~24k
-
-def pcm_to_opus_packets(pcm_int16: np.ndarray):
-    for i in range(0, len(pcm_int16), SAMPLES):
-        frame = pcm_int16[i:i+SAMPLES]
-        if len(frame) < SAMPLES: break
-        yield enc.encode(frame.tobytes(), SAMPLES)  # bytes(单包)
-```
-
-### 14.2 ASR 端：Opus → PCM 解码
-
-```python
-from opuslib import Decoder
-SR, CH, FRAME_MS = 16000, 1, 20
-SAMPLES = SR * FRAME_MS // 1000
-dec = Decoder(SR, CH)
-
-def opus_packet_to_pcm(packet: bytes) -> bytes:
-    return dec.decode(packet, SAMPLES)  # 320 samples * 2 bytes
 ```
 
 ---
