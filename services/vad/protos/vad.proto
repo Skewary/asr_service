@@ -1,0 +1,29 @@
+syntax = "proto3";
+package vad;
+
+message Start {
+  string flow_id = 1;
+  int32 sample_rate = 2;
+}
+
+message Pcm {
+  bytes data = 1;
+}
+
+message Flush {}
+
+message ClientFrame {
+  oneof msg {
+    Start start = 1;
+    Pcm pcm = 2;
+    Flush flush = 3;
+  }
+}
+
+message ServerFrame {
+  Pcm pcm = 1;
+}
+
+service VoiceActivity {
+  rpc Stream(stream ClientFrame) returns (stream ServerFrame);
+}

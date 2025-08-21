@@ -1,0 +1,1 @@
+"""gRPC-based Voice Activity Detection service and utilities."""
