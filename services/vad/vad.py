@@ -145,3 +145,4 @@ class VadSession:
         buf = io.BytesIO()
         sf.write(buf, arr, self.sr, format="WAV")
         return buf.getvalue()
+
