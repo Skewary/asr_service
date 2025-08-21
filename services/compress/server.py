@@ -19,7 +19,8 @@ import tornado.web
 
 # -------- 配置 --------
 COMPRESS_PORT = int(os.environ.get("COMPRESS_PORT", "5691"))
-STATIC_DIR = os.path.abspath(os.environ.get("AUDIO_STATIC_DIR", "./static_audio"))
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+STATIC_DIR = os.path.abspath(os.environ.get("AUDIO_STATIC_DIR", os.path.join(BASE_DIR, "static_audio")))
 os.makedirs(STATIC_DIR, exist_ok=True)
 
 # 可选：强制使用此基地址构造绝对URL（跨设备时推荐设置）
