@@ -52,16 +52,15 @@ class LIDServicer(lid_pb2_grpc.LIDServicer):
             os.remove(tmp_path)
 
 
-def serve() -> None:
+async def serve() -> None:
     configure_logging()
     server = grpc.aio.server()
     lid_pb2_grpc.add_LIDServicer_to_server(LIDServicer(), server)
     server.add_insecure_port(f"[::]:{LID_PORT}")
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(server.start())
-    logger.info("LID gRPC server started on port %s", LID_PORT)
-    loop.run_until_complete(server.wait_for_termination())
+    await server.start()
+    logger.info("LID gRPC server started on %s", LID_PORT)
+    await server.wait_for_termination()
 
 
 if __name__ == "__main__":
-    serve()
+    asyncio.run(serve())
