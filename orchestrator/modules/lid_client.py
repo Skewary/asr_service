@@ -1,11 +1,13 @@
 """gRPC client for language identification."""
 
 import grpc
+
+from config import LID_PORT
 from services.lid.protos import lid_pb2, lid_pb2_grpc  # type: ignore
 
 
 class LidClient:
-    def __init__(self, flow_id: str, target: str = "localhost:50052") -> None:
+    def __init__(self, flow_id: str, target: str = f"localhost:{LID_PORT}") -> None:
         self.flow_id = flow_id
         self.channel = grpc.aio.insecure_channel(target)
         self.stub = lid_pb2_grpc.LIDStub(self.channel)

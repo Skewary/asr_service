@@ -2,11 +2,13 @@
 
 import asyncio
 import grpc
+
+from config import ASR_PORT
 from ..protos import asr_pb2, asr_pb2_grpc
 
 
 class AsrClient:
-    def __init__(self, flow_id: str, target: str = "asr:50051") -> None:
+    def __init__(self, flow_id: str, target: str = f"asr:{ASR_PORT}") -> None:
         self.flow_id = flow_id
         self.channel = grpc.aio.insecure_channel(target)
         self.stub = asr_pb2_grpc.RecognizeStub(self.channel)

@@ -1,9 +1,11 @@
 import asyncio, numpy as np, soundfile as sf, grpc
 from pathlib import Path
+
+from config import VAD_PORT
 from services.vad.protos import vad_pb2, vad_pb2_grpc
 
 
-async def send_only(target="localhost:9001", wav_path: str | None = None):
+async def send_only(target=f"localhost:{VAD_PORT}", wav_path: str | None = None):
     wav_path = wav_path or str(Path(__file__).with_name("test.wav"))
     y, sr = sf.read(wav_path, dtype="float32")
     if y.ndim > 1:

@@ -1,11 +1,13 @@
 """gRPC client for denoising service."""
 
 import grpc
+
+from config import DENOISE_PORT
 from services.denoise.protos import denoise_pb2, denoise_pb2_grpc  # type: ignore
 
 
 class DenoiseClient:
-    def __init__(self, target: str = "localhost:50053") -> None:
+    def __init__(self, target: str = f"localhost:{DENOISE_PORT}") -> None:
         self.channel = grpc.aio.insecure_channel(target)
         self.stub = denoise_pb2_grpc.DenoiseStub(self.channel)
 

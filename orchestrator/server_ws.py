@@ -3,6 +3,7 @@ import tornado.ioloop
 import tornado.web
 import tornado.websocket
 
+from config import ORCHESTRATOR_PORT
 from .pipeline import Orchestrator
 
 
@@ -42,5 +43,6 @@ def make_app() -> tornado.web.Application:
 
 if __name__ == "__main__":  # pragma: no cover
     app = make_app()
-    app.listen(8000)
+    app.listen(ORCHESTRATOR_PORT)
+    print(f"Orchestrator server listening on port {ORCHESTRATOR_PORT}")
     tornado.ioloop.IOLoop.current().start()

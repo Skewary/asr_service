@@ -3,11 +3,13 @@
 import asyncio
 import numpy as np
 import grpc
+
+from config import COMPRESS_PORT
 from services.compress.protos import compress_pb2, compress_pb2_grpc  # type: ignore
 
 
 class CompressClient:
-    def __init__(self, target: str = "localhost:50054") -> None:
+    def __init__(self, target: str = f"localhost:{COMPRESS_PORT}") -> None:
         self.channel = grpc.aio.insecure_channel(target)
         self.stub = compress_pb2_grpc.CompressStub(self.channel)
         self.frame_samples = 16000 * 20 // 1000
