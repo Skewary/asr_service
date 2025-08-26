@@ -1,10 +1,13 @@
 import json
+import logging
 import tornado.ioloop
 import tornado.web
 import tornado.websocket
 
-from config import ORCHESTRATOR_PORT
+from config import ORCHESTRATOR_PORT, configure_logging
 from .pipeline import Orchestrator
+
+logger = logging.getLogger(__name__)
 
 
 class StreamHandler(tornado.websocket.WebSocketHandler):
@@ -16,7 +19,7 @@ class StreamHandler(tornado.websocket.WebSocketHandler):
 
     async def open(self) -> None:  # pragma: no cover - Tornado callback
         self.buffer = bytearray()
-        print("WS connected")
+        logger.info("WS connected")
 
     async def on_message(self, message):  # pragma: no cover - Tornado callback
         if isinstance(message, bytes):
@@ -42,7 +45,8 @@ def make_app() -> tornado.web.Application:
 
 
 if __name__ == "__main__":  # pragma: no cover
+    configure_logging()
     app = make_app()
     app.listen(ORCHESTRATOR_PORT)
-    print(f"Orchestrator server listening on port {ORCHESTRATOR_PORT}")
+    logger.info("Orchestrator server listening on port %s", ORCHESTRATOR_PORT)
     tornado.ioloop.IOLoop.current().start()

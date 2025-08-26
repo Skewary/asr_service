@@ -1,7 +1,10 @@
 import asyncio
+import logging
 from typing import Any, Dict
 
 from .modules import denoise_client, lid_client, asr_client, vad_client, compress_client
+
+logger = logging.getLogger(__name__)
 
 
 class Orchestrator:
@@ -21,7 +24,7 @@ class Orchestrator:
             "denoise": denoise_client.DenoiseClient(),
             "buffer": bytearray(),
         }
-        print(f"[{flow_id}] start")
+        logger.info("[%s] start", flow_id)
 
     async def feed_pcm(self, flow_id: str, pcm_bytes: bytes, ws) -> None:
         """Process raw PCM: VAD -> Denoise -> LID (buffer only)."""
@@ -66,4 +69,4 @@ class Orchestrator:
             sess["lid"].close()
             sess["denoise"].close()
             sess["compress"].close()
-        print(f"[{flow_id}] closed")
+        logger.info("[%s] closed", flow_id)

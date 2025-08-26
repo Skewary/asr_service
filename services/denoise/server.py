@@ -1,7 +1,8 @@
+import logging
 import grpc
 from concurrent import futures
 
-from config import DENOISE_PORT
+from config import DENOISE_PORT, configure_logging
 
 from .protos import denoise_pb2, denoise_pb2_grpc
 
@@ -14,10 +15,12 @@ class DenoiseServicer(denoise_pb2_grpc.DenoiseServicer):
 
 
 def serve() -> None:
+    configure_logging()
+    logger = logging.getLogger(__name__)
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=2))
     denoise_pb2_grpc.add_DenoiseServicer_to_server(DenoiseServicer(), server)
     server.add_insecure_port(f"[::]:{DENOISE_PORT}")
-    print(f"\u2705 Denoise gRPC service started (port={DENOISE_PORT})")
+    logger.info("Denoise gRPC service started (port=%s)", DENOISE_PORT)
     server.start()
     server.wait_for_termination()
 

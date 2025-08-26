@@ -1,10 +1,13 @@
 """gRPC client for streaming ASR service."""
 
 import asyncio
+import logging
 import grpc
 
 from config import ASR_PORT
 from ..protos import asr_pb2, asr_pb2_grpc
+
+logger = logging.getLogger(__name__)
 
 
 class AsrClient:
@@ -28,7 +31,7 @@ class AsrClient:
             await self.stream.done_writing()
             async for evt in self.stream:
                 # In real implementation the result would be forwarded.
-                print("ASR result:", evt)
+                logger.info("ASR result: %s", evt)
 
     def close(self) -> None:
         if self.channel:
