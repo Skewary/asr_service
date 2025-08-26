@@ -7,7 +7,7 @@ import wave
 from pathlib import Path
 
 import grpc
-from speechbrain.pretrained import LanguageID
+from speechbrain.inference.classifiers import EncoderClassifier
 
 from .protos import lid_pb2, lid_pb2_grpc
 
@@ -15,7 +15,7 @@ from .protos import lid_pb2, lid_pb2_grpc
 MODEL_DIR = Path(__file__).resolve().parents[2] / "models" / "lid"
 
 # Load model at module import so it can be shared across requests.
-lid_model = LanguageID.from_hparams(
+lid_model = EncoderClassifier.from_hparams(
     source="speechbrain/lang-id-commonlanguage_ecapa", savedir=str(MODEL_DIR)
 )
 
@@ -38,8 +38,8 @@ class LIDServicer(lid_pb2_grpc.LIDServicer):
             f.write(wav_bytes)
             tmp_path = f.name
         try:
-            out_prob, score, language = lid_model.classify_file(tmp_path)
-            return lid_pb2.LIDResponse(language=language, score=float(score))
+            out_prob, score, index, language = lid_model.classify_file(tmp_path)
+            return lid_pb2.LIDResponse(language=language[0], score=float(score))
         finally:
             os.remove(tmp_path)
 
