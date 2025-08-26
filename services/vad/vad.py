@@ -1,6 +1,7 @@
 import os
 import io
 from collections import deque
+from pathlib import Path
 from typing import List, Optional
 
 import numpy as np
@@ -17,10 +18,8 @@ VAD_PAD_END_MS = int(os.environ.get("VAD_PAD_END_MS", "80"))
 
 
 def _default_model_path() -> str:
-    return os.environ.get(
-        "VAD_MODEL",
-        os.path.join(os.path.dirname(__file__), "..", "..", "models", "ten-vad.onnx"),
-    )
+    base = Path(__file__).resolve().parents[2] / "models" / "ten-vad.onnx"
+    return os.environ.get("VAD_MODEL", str(base))
 
 
 def pcm16_bytes_to_float32(pcm: bytes) -> np.ndarray:

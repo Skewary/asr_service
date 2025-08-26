@@ -4,6 +4,7 @@ import io
 import os
 import tempfile
 import wave
+from pathlib import Path
 
 import grpc
 from speechbrain.pretrained import LanguageID
@@ -11,13 +12,11 @@ from speechbrain.pretrained import LanguageID
 from .protos import lid_pb2, lid_pb2_grpc
 
 # Persist model weights under repository's models directory
-MODEL_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "models", "lid"
-)
+MODEL_DIR = Path(__file__).resolve().parents[2] / "models" / "lid"
 
 # Load model at module import so it can be shared across requests.
 lid_model = LanguageID.from_hparams(
-    source="speechbrain/lang-id-commonlanguage_ecapa", savedir=MODEL_DIR
+    source="speechbrain/lang-id-commonlanguage_ecapa", savedir=str(MODEL_DIR)
 )
 
 
