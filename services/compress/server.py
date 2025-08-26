@@ -1,9 +1,10 @@
+import logging
 import grpc
 from concurrent import futures
 import numpy as np
 from opuslib import Encoder, APPLICATION_AUDIO
 
-from config import COMPRESS_PORT
+from config import COMPRESS_PORT, configure_logging
 
 from .protos import compress_pb2, compress_pb2_grpc
 
@@ -23,10 +24,12 @@ class CompressServicer(compress_pb2_grpc.CompressServicer):
 
 
 def serve() -> None:
+    configure_logging()
+    logger = logging.getLogger(__name__)
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=2))
     compress_pb2_grpc.add_CompressServicer_to_server(CompressServicer(), server)
     server.add_insecure_port(f"[::]:{COMPRESS_PORT}")
-    print(f"✅ Compress gRPC 服务已启动 (port={COMPRESS_PORT})")
+    logger.info("Compress gRPC service started (port=%s)", COMPRESS_PORT)
     server.start()
     server.wait_for_termination()
 

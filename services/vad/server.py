@@ -3,9 +3,10 @@
 """gRPC server exposing the VAD session."""
 
 import asyncio
+import logging
 import grpc
 
-from config import VAD_PORT
+from config import VAD_PORT, configure_logging
 
 from .vad import make_vad_session, pcm16_bytes_to_float32
 from .protos import vad_pb2, vad_pb2_grpc
@@ -28,11 +29,13 @@ class VadServicer(vad_pb2_grpc.VoiceActivityServicer):
 
 
 async def serve() -> None:
+    configure_logging()
+    logger = logging.getLogger(__name__)
     server = grpc.aio.server()
     vad_pb2_grpc.add_VoiceActivityServicer_to_server(VadServicer(), server)
     server.add_insecure_port(f"[::]:{VAD_PORT}")
     await server.start()
-    print(f"VAD gRPC server listening on {VAD_PORT}")
+    logger.info("VAD gRPC server listening on %s", VAD_PORT)
     await server.wait_for_termination()
 
 

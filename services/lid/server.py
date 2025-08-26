@@ -1,6 +1,7 @@
 """Minimal gRPC LID service using SpeechBrain."""
 import asyncio
 import io
+import logging
 import os
 import tempfile
 import wave
@@ -9,7 +10,7 @@ from pathlib import Path
 import grpc
 from speechbrain.inference.classifiers import EncoderClassifier
 
-from config import LID_PORT
+from config import LID_PORT, configure_logging
 
 from .protos import lid_pb2, lid_pb2_grpc
 
@@ -47,12 +48,14 @@ class LIDServicer(lid_pb2_grpc.LIDServicer):
 
 
 def serve() -> None:
+    configure_logging()
+    logger = logging.getLogger(__name__)
     server = grpc.aio.server()
     lid_pb2_grpc.add_LIDServicer_to_server(LIDServicer(), server)
     server.add_insecure_port(f"[::]:{LID_PORT}")
     loop = asyncio.get_event_loop()
     loop.run_until_complete(server.start())
-    print(f"LID gRPC server started on port {LID_PORT}")
+    logger.info("LID gRPC server started on port %s", LID_PORT)
     loop.run_until_complete(server.wait_for_termination())
 
 

@@ -1,11 +1,14 @@
 """gRPC client for PCM→Opus compression."""
 
 import asyncio
+import logging
 import numpy as np
 import grpc
 
-from config import COMPRESS_PORT
+from config import COMPRESS_PORT, configure_logging
 from services.compress.protos import compress_pb2, compress_pb2_grpc  # type: ignore
+
+logger = logging.getLogger(__name__)
 
 
 class CompressClient:
@@ -33,9 +36,10 @@ class CompressClient:
 if __name__ == "__main__":
     async def _test():
         import os
+        configure_logging()
         cc = CompressClient()
         pcm = os.urandom(320 * 2)  # dummy 20ms
         out = await cc.encode(pcm)
-        print("encoded packets", len(out))
+        logger.info("encoded packets %s", len(out))
         cc.close()
     asyncio.run(_test())
