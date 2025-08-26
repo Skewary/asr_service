@@ -1,7 +1,9 @@
 # LID 语种识别服务
 
 基于 [SpeechBrain](https://github.com/speechbrain/speechbrain) 提供的
-`lang-id-commonlanguage_ecapa` 预训练模型，实现一个最小化的 gRPC 语种识别服务。
+`lang-id-commonlanguage_ecapa` 预训练模型，通过
+`speechbrain.inference.classifiers.EncoderClassifier` 加载官方 Hugging Face
+权重，实现一个最小化的 gRPC 语种识别服务。
 
 ## 启动
 
