@@ -22,6 +22,8 @@ lid_model = EncoderClassifier.from_hparams(
     source="speechbrain/lang-id-commonlanguage_ecapa", savedir=str(MODEL_DIR)
 )
 
+logger = logging.getLogger(__name__)
+
 
 def pcm_to_wav_bytes(pcm: bytes, sample_rate: int) -> bytes:
     """Wrap raw PCM bytes into a WAV container."""
@@ -43,13 +45,15 @@ class LIDServicer(lid_pb2_grpc.LIDServicer):
         try:
             out_prob, score, index, language = lid_model.classify_file(tmp_path)
             return lid_pb2.LIDResponse(language=language[0], score=float(score))
+        except Exception:
+            logger.exception("LID detection error")
+            await context.abort(grpc.StatusCode.INTERNAL, "LID detection error")
         finally:
             os.remove(tmp_path)
 
 
 def serve() -> None:
     configure_logging()
-    logger = logging.getLogger(__name__)
     server = grpc.aio.server()
     lid_pb2_grpc.add_LIDServicer_to_server(LIDServicer(), server)
     server.add_insecure_port(f"[::]:{LID_PORT}")

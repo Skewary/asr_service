@@ -30,25 +30,18 @@ pip install -r requirements.txt
 ## 快速开始
 
 1. 安装依赖：`pip install -r requirements.txt`
-2. 分别启动各项服务：
+2. 启动所有 gRPC 服务与编排器：
 
    ```bash
-   python -m services.vad.server
-   python -m services.denoise.server
-   python -m services.lid.server
-   python -m services.compress.server
+   ./start.sh
    ```
-   首次启动 VAD 与 LID 服务会自动将模型下载到仓库的 `models/` 目录。
-3. 启动编排器 WebSocket 服务：
-
-   ```bash
-   python -m orchestrator.server_ws
-   ```
-4. 运行示例客户端，将本地 `16k PCM` 流发送到编排器：
+   每个服务的标准输出和错误日志将分别写入 `vad.out`、`denoise.out`、`lid.out`、`compress.out` 和 `server.out`，便于排查问题。若需要更详细日志，可设置环境变量 `LOG_LEVEL=DEBUG` 后再运行。
+3. 运行示例客户端，将本地 `16k PCM` 流发送到 VAD 服务：
 
    ```bash
    PYTHONPATH=. python tests/send_only.py
    ```
+   首次启动 VAD 与 LID 服务会自动将模型下载到仓库的 `models/` 目录。
 
 ## 当前进度
 
