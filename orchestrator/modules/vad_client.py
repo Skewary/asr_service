@@ -3,11 +3,12 @@
 import asyncio
 import grpc
 
+from config import VAD_PORT
 from services.vad.protos import vad_pb2, vad_pb2_grpc
 
 
 class VadClient:
-    def __init__(self, target: str = "localhost:9001", flow_id: str = "default"):
+    def __init__(self, target: str = f"localhost:{VAD_PORT}", flow_id: str = "default"):
         self.flow_id = flow_id
         self.channel = grpc.aio.insecure_channel(target)
         self.stub = vad_pb2_grpc.VoiceActivityStub(self.channel)

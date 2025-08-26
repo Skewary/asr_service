@@ -2,14 +2,13 @@
 # -*- coding: utf-8 -*-
 """gRPC server exposing the VAD session."""
 
-import os
 import asyncio
 import grpc
 
+from config import VAD_PORT
+
 from .vad import make_vad_session, pcm16_bytes_to_float32
 from .protos import vad_pb2, vad_pb2_grpc
-
-VAD_PORT = int(os.environ.get("VAD_PORT", "9001"))
 
 
 class VadServicer(vad_pb2_grpc.VoiceActivityServicer):

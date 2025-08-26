@@ -9,6 +9,8 @@ from pathlib import Path
 import grpc
 from speechbrain.inference.classifiers import EncoderClassifier
 
+from config import LID_PORT
+
 from .protos import lid_pb2, lid_pb2_grpc
 
 # Persist model weights under repository's models directory
@@ -47,10 +49,10 @@ class LIDServicer(lid_pb2_grpc.LIDServicer):
 def serve() -> None:
     server = grpc.aio.server()
     lid_pb2_grpc.add_LIDServicer_to_server(LIDServicer(), server)
-    server.add_insecure_port("[::]:50052")
+    server.add_insecure_port(f"[::]:{LID_PORT}")
     loop = asyncio.get_event_loop()
     loop.run_until_complete(server.start())
-    print("LID gRPC server started on port 50052")
+    print(f"LID gRPC server started on port {LID_PORT}")
     loop.run_until_complete(server.wait_for_termination())
 
 
