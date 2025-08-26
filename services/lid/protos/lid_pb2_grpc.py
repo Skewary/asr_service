@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-import lid_pb2 as lid__pb2
+from . import lid_pb2 as lid__pb2
 
 GRPC_GENERATED_VERSION = '1.63.0'
 GRPC_VERSION = grpc.__version__
