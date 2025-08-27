@@ -18,19 +18,29 @@ class VadServicer(vad_pb2_grpc.VoiceActivityServicer):
         sess = make_vad_session()
         try:
             async for frame in request_iterator:
-                if frame.HasField("pcm"):
-                    sess.accept_f32(pcm16_bytes_to_float32(frame.pcm.data))
+                if frame.HasField("start"):
+                    s = frame.start
+                    logger.info("stream start: flow_id=%s sr=%s", s.flow_id, s.sample_rate)
+                elif frame.HasField("pcm"):
+                    pcm_bytes = frame.pcm.data
+                    logger.debug("recv %d bytes", len(pcm_bytes))
+                    sess.accept_f32(pcm16_bytes_to_float32(pcm_bytes))
                     out = sess.pop_pcm()
                     if out:
+                        logger.debug("emit %d bytes", len(out))
                         yield vad_pb2.ServerFrame(pcm=vad_pb2.Pcm(data=out))
                 elif frame.HasField("flush"):
+                    logger.info("stream flush")
                     out = sess.flush_pcm()
                     if out:
+                        logger.debug("emit %d bytes", len(out))
                         yield vad_pb2.ServerFrame(pcm=vad_pb2.Pcm(data=out))
                     break
         except Exception:
             logger.exception("VAD stream error")
             await context.abort(grpc.StatusCode.INTERNAL, "VAD stream error")
+        finally:
+            logger.info("stream end")
 
 
 async def serve() -> None:
