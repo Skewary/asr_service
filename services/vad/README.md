@@ -9,6 +9,7 @@ python -m services.vad.server
 ```
 
 首次运行会自动把 `ten-vad.onnx` 模型下载到仓库根目录的 `models/` 目录，后续可复用。服务默认监听 `9001` 端口，可通过环境变量 `VAD_PORT` 覆盖。
+在仓库根目录执行 `./start.sh` 时，本服务会自动启动并将日志写入 `vad.out`。
 
 ## 交互流程
 
