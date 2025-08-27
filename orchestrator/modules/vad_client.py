@@ -1,10 +1,13 @@
 """gRPC client for the VAD service."""
 
 import asyncio
+import logging
 import grpc
 
 from config import VAD_PORT
 from services.vad.protos import vad_pb2, vad_pb2_grpc
+
+logger = logging.getLogger(__name__)
 
 
 class VadClient:
@@ -22,6 +25,7 @@ class VadClient:
 
     async def send(self, pcm_bytes: bytes) -> bytes:
         await self._ensure_stream()
+        logger.debug("[%s] VAD send %d bytes", self.flow_id, len(pcm_bytes))
         await self.stream.write(vad_pb2.ClientFrame(pcm=vad_pb2.Pcm(data=pcm_bytes)))
         out = b""
         while True:
@@ -30,15 +34,18 @@ class VadClient:
                 out += resp.pcm.data
             except asyncio.TimeoutError:
                 break
+        logger.debug("[%s] VAD recv %d bytes", self.flow_id, len(out))
         return out
 
     async def flush(self) -> bytes:
         if not self.stream:
             return b""
+        logger.info("[%s] VAD flush", self.flow_id)
         await self.stream.write(vad_pb2.ClientFrame(flush=vad_pb2.Flush()))
         await self.stream.done_writing()
         out = b""
         async for resp in self.stream:
             out += resp.pcm.data
         self.stream = None
+        logger.debug("[%s] VAD flush recv %d bytes", self.flow_id, len(out))
         return out

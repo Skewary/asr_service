@@ -1,9 +1,12 @@
 """gRPC client for language identification."""
 
+import logging
 import grpc
 
 from config import LID_PORT
 from services.lid.protos import lid_pb2, lid_pb2_grpc  # type: ignore
+
+logger = logging.getLogger(__name__)
 
 
 class LidClient:
@@ -16,14 +19,17 @@ class LidClient:
     def feed(self, pcm_bytes: bytes) -> None:
         """Collect PCM for language identification."""
         self.buffer.extend(pcm_bytes)
+        logger.debug("[%s] LID buffered %d bytes", self.flow_id, len(self.buffer))
 
     async def flush(self) -> str | None:
         """Send accumulated audio and return detected language."""
         if not self.buffer:
             return None
+        logger.debug("[%s] LID flush %d bytes", self.flow_id, len(self.buffer))
         request = lid_pb2.LIDRequest(pcm=bytes(self.buffer), sample_rate=16000)
         resp = await self.stub.Detect(request)
         self.buffer.clear()
+        logger.info("[%s] LID detected %s", self.flow_id, resp.language)
         return resp.language
 
     def close(self) -> None:
