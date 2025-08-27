@@ -9,6 +9,7 @@ python -m services.compress.server
 ```
 
 服务默认监听在 `50054` 端口，可通过 `COMPRESS_PORT` 环境变量调整。
+使用仓库根目录的 `./start.sh` 时，本服务会自动启动并将日志写入 `compress.out`。
 
 ## 接口
 

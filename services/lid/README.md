@@ -11,7 +11,7 @@
 python -m services.lid.server
 ```
 
-首次启动会自动把模型下载到仓库的 `models/lid/` 目录，以便后续复用。运行在 `start.sh` 中时，日志将输出到 `lid.out`，可通过 `LOG_LEVEL` 环境变量调整详细程度。
+首次启动会自动把模型下载到仓库的 `models/lid/` 目录，以便后续复用。也可在仓库根目录执行 `./start.sh` 统一启动本服务，日志将输出到 `lid.out`，可通过 `LOG_LEVEL` 环境变量调整详细程度。
 
 ## 接口
 

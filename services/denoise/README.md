@@ -9,6 +9,7 @@ python -m services.denoise.server
 ```
 
 服务默认监听 `50053` 端口。
+在仓库根目录运行 `./start.sh` 时，本服务将随其他组件一同启动，日志写入 `denoise.out`。
 
 ## 接口
 

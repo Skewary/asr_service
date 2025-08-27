@@ -2,6 +2,22 @@
 
 基于 WebSocket 和 gRPC 的流式语音识别示例。编排器从客户端接收 PCM16/16k 单声道音频，依次调用 VAD、降噪、LID，再在发送给 ASR 前编码为 Opus，最终聚合结果回推给客户端。
 
+## 架构与数据流向
+
+1. **客户端 → 编排器 WebSocket 服务**：
+   - 客户端通过 `/ws/stream` 建立连接，首帧发送 `start` 控制消息，随后以二进制 PCM16 帧推送音频。
+2. **编排器管线**：
+   - 按顺序调用各 gRPC 服务：
+     1. VAD 过滤静音并返回语音段。
+     2. Denoise 对语音段去噪（目前为直通）。
+     3. LID 累积语音并在 `flush` 后返回语言标签。
+     4. Compress 将缓冲的 PCM 编码为 Opus 帧，发送给 ASR。
+   - 各阶段产生的事件如 `ack`、`lid`、`asr_partial`、`asr_final` 等通过 WebSocket 回传。
+3. **ASR 服务**：
+   - 接收 Opus 数据并返回识别结果，编排器将最终 `end` 事件告知客户端。
+
+整体数据链路：`WebSocket PCM → VAD → Denoise → LID → Compress → ASR → WebSocket 事件`。
+
 ## 依赖
 
 请先安装 Python 3.10+，然后执行：
@@ -42,6 +58,13 @@ pip install -r requirements.txt
    PYTHONPATH=. python tests/send_only.py
    ```
    首次启动 VAD 与 LID 服务会自动将模型下载到仓库的 `models/` 目录。
+
+4. 运行 `send_to_orchestrator.py` 直接验证整个编排器链路：
+
+   ```bash
+   PYTHONPATH=. python tests/send_to_orchestrator.py --ws ws://127.0.0.1:9000/ws/stream --input tests/test.wav
+   ```
+   该脚本会持续打印编排器返回的 `ack`、`lid`、`asr_*` 等事件，并将收到的二进制帧落盘。
 
 ## 当前进度
 

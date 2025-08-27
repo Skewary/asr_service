@@ -3,22 +3,7 @@
 该目录提供一个最小可用的音频编排器示例，通过 WebSocket 接收 PCM16 音频数据，内部串联 VAD/降噪/LID/压缩/ASR，并将结果回推给客户端。
 
 ## 启动依赖服务
-
-在运行编排器之前，需要先启动各个 gRPC 服务：
-
-```bash
-# 语音活动检测
-python -m services.vad.server
-
-# 空壳降噪
-python -m services.denoise.server
-
-# 语种识别
-python -m services.lid.server
-
-# PCM→Opus 压缩
-python -m services.compress.server
-```
+可以通过仓库根目录的 `start.sh` 一键启动 VAD、降噪、LID、压缩及编排器，并把日志分别写入对应的 `*.out` 文件。
 
 ## 使用流程
 
@@ -39,6 +24,12 @@ python -m services.compress.server
 
 3. **事件返回**
    服务端会通过文本帧返回 `ack` / `lid` / `asr_partial` / `asr_final` / `end` 等事件。
+
+   仓库提供了 `tests/send_to_orchestrator.py` 作为示例客户端，可用于快速验证：
+
+   ```bash
+   PYTHONPATH=. python tests/send_to_orchestrator.py --ws ws://127.0.0.1:9000/ws/stream --input tests/test.wav
+   ```
 
 ## 注意事项
 
