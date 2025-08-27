@@ -22,6 +22,17 @@ async def send_only(target=f"localhost:{VAD_PORT}", wav_path: str | None = None)
         chan = grpc.aio.insecure_channel(target)
         stub = vad_pb2_grpc.VoiceActivityStub(chan)
         stream = stub.Stream()
+
+        async def read_responses():
+            try:
+                async for resp in stream:
+                    if resp.pcm.data:
+                        logger.info("received %d bytes", len(resp.pcm.data))
+            except grpc.RpcError as e:
+                logger.error("stream read error: %s", e)
+
+        reader = asyncio.create_task(read_responses())
+
         await stream.write(
             vad_pb2.ClientFrame(start=vad_pb2.Start(flow_id="test", sample_rate=16000))
         )
@@ -29,17 +40,10 @@ async def send_only(target=f"localhost:{VAD_PORT}", wav_path: str | None = None)
             await stream.write(
                 vad_pb2.ClientFrame(pcm=vad_pb2.Pcm(data=pcm[i : i + step]))
             )
-            while True:
-                try:
-                    resp = await asyncio.wait_for(stream.read(), timeout=0)
-                    if resp.pcm.data:
-                        logger.info("received %d bytes", len(resp.pcm.data))
-                except asyncio.TimeoutError:
-                    break
+
         await stream.write(vad_pb2.ClientFrame(flush=vad_pb2.Flush()))
         await stream.done_writing()
-        async for _ in stream:
-            pass
+        await reader
         await chan.close()
     except grpc.RpcError as e:
         logger.error("gRPC error: %s", e)
