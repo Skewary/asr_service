@@ -19,10 +19,13 @@ class CompressServicer(compress_pb2_grpc.CompressServicer):
 
     def Encode(self, request: compress_pb2.PCM, context) -> compress_pb2.Opus:  # type: ignore
         try:
+            logger.debug("recv %d bytes", len(request.data))
             pcm = np.frombuffer(request.data, dtype=np.int16)
             if len(pcm) < self.samples:
+                logger.debug("emit 0 bytes")
                 return compress_pb2.Opus(data=b"")
             pkt = self.encoder.encode(pcm[: self.samples].tobytes(), self.samples)
+            logger.debug("emit %d bytes", len(pkt))
             return compress_pb2.Opus(data=pkt)
         except Exception:
             logger.exception("Compress encoding error")

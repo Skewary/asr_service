@@ -38,12 +38,14 @@ def pcm_to_wav_bytes(pcm: bytes, sample_rate: int) -> bytes:
 
 class LIDServicer(lid_pb2_grpc.LIDServicer):
     async def Detect(self, request: lid_pb2.LIDRequest, context) -> lid_pb2.LIDResponse:
+        logger.debug("recv %d bytes", len(request.pcm))
         wav_bytes = pcm_to_wav_bytes(request.pcm, request.sample_rate or 16000)
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
             f.write(wav_bytes)
             tmp_path = f.name
         try:
             out_prob, score, index, language = lid_model.classify_file(tmp_path)
+            logger.debug("emit label=%s score=%.4f", language[0], float(score))
             return lid_pb2.LIDResponse(language=language[0], score=float(score))
         except Exception:
             logger.exception("LID detection error")

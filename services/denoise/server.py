@@ -14,7 +14,11 @@ class DenoiseServicer(denoise_pb2_grpc.DenoiseServicer):
 
     def Clean(self, request: denoise_pb2.Audio, context):  # type: ignore[override]
         try:
-            return denoise_pb2.Audio(pcm=request.pcm, sample_rate=request.sample_rate)
+            pcm_in = request.pcm
+            logger.debug("recv %d bytes", len(pcm_in))
+            resp = denoise_pb2.Audio(pcm=pcm_in, sample_rate=request.sample_rate)
+            logger.debug("emit %d bytes", len(resp.pcm))
+            return resp
         except Exception:
             logger.exception("Denoise clean error")
             context.set_code(grpc.StatusCode.INTERNAL)
