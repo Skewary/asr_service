@@ -18,6 +18,7 @@ class CompressClient:
         self.frame_samples = 16000 * 20 // 1000
 
     async def encode(self, pcm_bytes: bytes) -> list[bytes]:
+        logger.debug("compress %d bytes", len(pcm_bytes))
         pcm = np.frombuffer(pcm_bytes, dtype=np.int16)
         packets: list[bytes] = []
         for i in range(0, len(pcm), self.frame_samples):
@@ -27,6 +28,7 @@ class CompressClient:
             req = compress_pb2.PCM(data=frame.tobytes())
             resp = await self.stub.Encode(req)
             packets.append(resp.data)
+        logger.debug("compress -> %d packets", len(packets))
         return packets
 
     def close(self) -> None:

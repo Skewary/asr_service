@@ -22,6 +22,7 @@ class AsrClient:
             self.stream = self.stub.Stream()
             start = asr_pb2.Start(flow_id=self.flow_id, codec="opus", sr=16000, language=language)
             await self.stream.write(asr_pb2.ClientFrame(start=start))
+        logger.debug("[%s] ASR send %d bytes", self.flow_id, len(opus_pkt))
         await self.stream.write(
             asr_pb2.ClientFrame(opus=asr_pb2.OpusPacket(data=opus_pkt))
         )
@@ -30,9 +31,8 @@ class AsrClient:
         if self.stream:
             await self.stream.done_writing()
             async for evt in self.stream:
-                # In real implementation the result would be forwarded.
-                logger.info("ASR result: %s", evt)
-
+                logger.info("[%s] ASR result: %s", self.flow_id, evt)
+            
     def close(self) -> None:
         if self.channel:
             self.channel.close()
