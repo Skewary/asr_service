@@ -17,7 +17,40 @@
    - 接收 Opus 数据并返回识别结果，编排器将最终 `end` 事件告知客户端。
 
 整体数据链路：`WebSocket PCM → VAD → Denoise → LID → Compress → ASR → WebSocket 事件`。
+```mermaid
+sequenceDiagram
+  participant Client as Client
+  participant Orchestrator as Orchestrator (WS)
+  participant VAD as VAD Service
+  participant Denoise as Denoise Service
+  participant LID as LID Service
+  participant Compress as Compress Service
+  participant ASR as ASR Service
 
+  Client->>Orchestrator: start {flowId, format, sr, channels}
+  loop Streaming PCM
+      Client->>Orchestrator: PCM16 chunk
+      Orchestrator->>VAD: send(chunk)
+      VAD-->>Orchestrator: voiced PCM
+      Orchestrator->>Denoise: send(voiced)
+      Denoise-->>Orchestrator: clean PCM
+      Orchestrator->>LID: feed(clean PCM)
+      Orchestrator->>Orchestrator: buffer.extend(clean PCM)
+  end
+  Client->>Orchestrator: flush
+  Orchestrator->>VAD: flush()
+  VAD-->>Orchestrator: tail PCM
+  Orchestrator->>Denoise: send(tail)
+  Denoise-->>Orchestrator: clean tail
+  Orchestrator->>LID: flush()
+  LID-->>Orchestrator: detected language
+  Orchestrator->>Compress: encode(buffer)
+  Compress-->>Orchestrator: opus packets
+  Orchestrator->>ASR: send(opus packets + language)
+  ASR-->>Orchestrator: transcription
+  Orchestrator->>Client: {"type":"lid", "language":...}
+  Orchestrator->>Client: {"type":"end"}
+```
 ## 依赖
 
 请先安装 Python 3.10+，然后执行：
